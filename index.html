@@ -1104,51 +1104,83 @@
 
 >
 <script>
+// ===== SETTINGS PERSISTANTS =====
+const Settings = {
+  get: (key, fallback) => { const v = localStorage.getItem('portfolio_' + key); return v !== null ? JSON.parse(v) : fallback; },
+  set: (key, value) => localStorage.setItem('portfolio_' + key, JSON.stringify(value))
+};
+
 function enterMenu() {
   sessionStorage.setItem('profileSelected', '1');
   document.getElementById('profile-select').classList.add('hidden');
   const music = document.getElementById('bg-music');
-  music.volume = 0.7;
-  music.play().catch(() => {});
+  const vol = Settings.get('musicVolume', 70);
+  music.volume = vol / 100;
+  if (Settings.get('musicOn', true)) music.play().catch(() => {});
 }
 
 // Skip profile select if already chosen this session
 if (sessionStorage.getItem('profileSelected')) {
   document.getElementById('profile-select').classList.add('hidden');
-  // Also start music after a short delay
   window.addEventListener('load', () => {
     setTimeout(() => {
       const music = document.getElementById('bg-music');
-      if (music) { music.volume = 0.7; music.play().catch(() => {}); }
-    }, 500);
+      if (music) {
+        const vol = Settings.get('musicVolume', 70);
+        music.volume = vol / 100;
+        if (Settings.get('musicOn', true)) music.play().catch(() => {});
+        else { document.getElementById('music-btn').textContent = '🔇'; document.getElementById('music-btn').classList.add('paused'); }
+      }
+      // Apply saved language
+      const lang = Settings.get('lang', 'fr');
+      if (lang !== 'fr') applyTranslations(lang);
+      // Sync lang buttons
+      const titles = { fr: 'Français', en: 'English', ja: '日本語' };
+      document.querySelectorAll('.lang-btn').forEach(b => { b.classList.toggle('active', b.title === titles[lang]); });
+      document.querySelectorAll('.opt-lang-btn').forEach(b => {
+        const active = b.title === titles[lang];
+        b.style.opacity = active ? '1' : '0.45';
+        b.style.filter = active ? 'grayscale(0%)' : 'grayscale(50%)';
+        b.style.borderColor = active ? 'var(--red)' : 'transparent';
+        b.style.transform = active ? 'translateY(-2px)' : '';
+      });
+      // Apply sfx settings
+      sfxEnabled = Settings.get('sfxOn', true);
+      sfxVolume = Settings.get('sfxVolume', 50) / 100;
+      if (!sfxEnabled) {
+        document.getElementById('sfx-toggle').style.background = '#333';
+        document.getElementById('sfx-knob').style.transform = 'translateX(0)';
+        document.getElementById('sfx-label').textContent = 'OFF';
+      }
+      // Sync sliders
+      const volSlider = document.getElementById('volume-slider');
+      if (volSlider) { volSlider.value = Settings.get('musicVolume', 70); document.getElementById('volume-display').textContent = Settings.get('musicVolume', 70) + '%'; }
+      const sfxSlider = document.getElementById('sfx-slider');
+      if (sfxSlider) { sfxSlider.value = Settings.get('sfxVolume', 50); document.getElementById('sfx-display').textContent = Settings.get('sfxVolume', 50) + '%'; }
+    }, 300);
   });
 }
 
-let musicPlaying = true;
+let musicPlaying = Settings.get('musicOn', true);
 function toggleMusic() {
   musicPlaying = !musicPlaying;
+  Settings.set('musicOn', musicPlaying);
   const music = document.getElementById('bg-music');
   const btn = document.getElementById('music-btn');
-  if (musicPlaying) {
-    music.play();
-    btn.textContent = '🎵';
-    btn.classList.remove('paused');
-  } else {
-    music.pause();
-    btn.textContent = '🔇';
-    btn.classList.add('paused');
-  }
+  if (musicPlaying) { music.play(); btn.textContent = '🎵'; btn.classList.remove('paused'); }
+  else { music.pause(); btn.textContent = '🔇'; btn.classList.add('paused'); }
 }
 
 function setVolume(val) {
   document.getElementById('volume-display').textContent = val + '%';
   document.getElementById('bg-music').volume = val / 100;
+  Settings.set('musicVolume', parseInt(val));
 }
 
 function setLangFromOptions(lang, event) {
-  // Apply translations
   applyTranslations(lang);
   currentLang = lang;
+  Settings.set('lang', lang);
   // Sync bottom lang bar
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.lang-btn').forEach(b => {
@@ -1177,10 +1209,12 @@ function setLangFromOptions(lang, event) {
 function setSFXVolume(val) {
   sfxVolume = val / 100;
   document.getElementById('sfx-display').textContent = val + '%';
+  Settings.set('sfxVolume', parseInt(val));
 }
 
 function toggleSFX() {
   sfxEnabled = !sfxEnabled;
+  Settings.set('sfxOn', sfxEnabled);
   const toggle = document.getElementById('sfx-toggle');
   const knob = document.getElementById('sfx-knob');
   const label = document.getElementById('sfx-label');
@@ -1256,6 +1290,7 @@ let currentLang = 'fr';
 
 function setLang(lang, event) {
   currentLang = lang;
+  Settings.set('lang', lang);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
   event.target.closest('.lang-btn').classList.add('active');
   applyTranslations(lang);

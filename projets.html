@@ -334,6 +334,39 @@
   }
   .proj-card.active { animation: cursor-blink 1.2s ease-in-out infinite; }
 
+  /* SELECTED state — confirmed pick */
+  @keyframes selected-pulse {
+    0%,100% { box-shadow: inset 0 0 0 3px var(--yellow), 0 0 20px rgba(245,196,0,0.4); }
+    50%      { box-shadow: inset 0 0 0 3px rgba(245,196,0,0.5), 0 0 8px rgba(245,196,0,0.1); }
+  }
+  .proj-card.selected {
+    background: #1a1500 !important;
+    animation: selected-pulse 1.5s ease-in-out infinite !important;
+  }
+  .proj-card.selected::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 3px; background: var(--yellow);
+    box-shadow: 0 0 12px rgba(245,196,0,0.9);
+  }
+  .proj-card.selected .card-num { color: var(--yellow) !important; }
+  .proj-card.selected .card-name { color: var(--yellow) !important; }
+
+  /* Selected badge in big display */
+  #selected-badge {
+    display: none;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.7rem; letter-spacing: 0.3em;
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+    padding: 0.15rem 0.6rem;
+    clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+    margin-bottom: 0.4rem;
+    width: fit-content;
+    animation: selected-pulse 1.5s ease-in-out infinite;
+  }
+  #selected-badge.visible { display: block; }
+
   /* ===== BOUTON RETOUR ===== */
   #btn-back {
     position: fixed; top: 1.2rem; left: 1.5rem; z-index: 200;
@@ -405,6 +438,7 @@
     </div>
     <div id="selected-info">
       <div>
+        <div id="selected-badge">★ SÉLECTIONNÉ</div>
         <div class="sel-category" id="sel-category">SAÉ</div>
         <div class="sel-title" id="sel-title">Pigméa</div>
         <div class="sel-subtitle" id="sel-subtitle">Agence d'infographie — SAÉ 201-202</div>
@@ -426,7 +460,7 @@
 
 <div class="bottom-bar">
   <span><span class="key">←→</span> Naviguer</span>
-  <span><span class="key">ENTRÉE</span> Sélectionner</span>
+  <span><span class="key">ENTRÉE / CLIC</span> Sélectionner</span>
   <span><span class="key">ESC</span> Retour au menu</span>
 </div>
 
@@ -508,6 +542,7 @@ const projects = [
 ];
 
 let current = 0;
+let selectedIndex = -1;
 
 // Build grid
 const grid = document.getElementById('project-grid');
@@ -516,16 +551,36 @@ projects.forEach((p, i) => {
   card.className = 'proj-card' + (i === 0 ? ' active' : '');
   card.dataset.index = i;
   card.innerHTML = `
-    <div class="card-art" style="${p.img ? 'padding:0;overflow:hidden;' : ''}">${p.img ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:cover;object-position:center top;">` : p.icon}</div>
+    <div class="card-art" style="${p.img ? 'padding:0;overflow:hidden;background:#0d0d0d;' : ''}">${p.img ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:contain;object-position:center center;">` : p.icon}</div>
     <div class="card-info">
       <div class="card-num">0${p.id}</div>
       <div class="card-name">${p.name}</div>
       <div class="card-type">${p.category}</div>
     </div>`;
-  card.addEventListener('click', () => selectProject(i));
+  card.addEventListener('click', () => {
+    selectProject(i);
+    toggleSelected(i);
+    playSFX('click');
+  });
   card.addEventListener('mouseenter', () => { selectProject(i); playSFX('hover'); });
   grid.appendChild(card);
 });
+
+function toggleSelected(i) {
+  if (selectedIndex === i) {
+    // Deselect
+    selectedIndex = -1;
+    document.querySelectorAll('.proj-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('selected-badge').classList.remove('visible');
+  } else {
+    // Select new one
+    selectedIndex = i;
+    document.querySelectorAll('.proj-card').forEach((c, idx) => {
+      c.classList.toggle('selected', idx === i);
+    });
+    document.getElementById('selected-badge').classList.add('visible');
+  }
+}
 
 function selectProject(i) {
   current = i;
@@ -565,12 +620,14 @@ function selectProject(i) {
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') { selectProject((current + 1) % 8); playSFX('hover'); }
   if (e.key === 'ArrowLeft')  { selectProject((current + 7) % 8); playSFX('hover'); }
-  if (e.key === 'Enter')      { playSFX('click'); }
+  if (e.key === 'Enter')      { toggleSelected(current); playSFX('click'); }
   if (e.key === 'Escape')     { window.location.href = 'portfolio_nobrega.html'; }
 });
 
 // SFX
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let sfxEnabled = Settings.get('sfxOn', true);
+let sfxVolume = Settings.get('sfxVolume', 50) / 100;
 function playSFX(type) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const now = audioCtx.currentTime;
@@ -597,17 +654,35 @@ function playSFX(type) {
   }
 }
 
-// Music
+
+// ===== SETTINGS PERSISTANTS =====
+const Settings = {
+  get: (key, fallback) => { const v = localStorage.getItem('portfolio_' + key); return v !== null ? JSON.parse(v) : fallback; },
+  set: (key, value) => localStorage.setItem('portfolio_' + key, JSON.stringify(value))
+};
+
 const music = document.getElementById('bg-music');
-let musicPlaying = true;
+let musicPlaying = Settings.get('musicOn', true);
+
 function toggleMusic() {
   musicPlaying = !musicPlaying;
+  Settings.set('musicOn', musicPlaying);
   const btn = document.getElementById('music-btn');
   if (musicPlaying) { music.play(); btn.textContent = '🎵'; btn.classList.remove('paused'); }
   else { music.pause(); btn.textContent = '🔇'; btn.classList.add('paused'); }
 }
-music.volume = 0.7;
-music.play().catch(() => {});
+
+window.addEventListener('load', () => {
+  const vol = Settings.get('musicVolume', 70);
+  music.volume = vol / 100;
+  if (musicPlaying) {
+    music.play().catch(() => {});
+  } else {
+    document.getElementById('music-btn').textContent = '🔇';
+    document.getElementById('music-btn').classList.add('paused');
+  }
+});
+
 </script>
 </body>
 </html>
